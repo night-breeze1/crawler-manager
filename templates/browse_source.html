@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ project_name }} {{ version }} - 源码浏览{% endblock %}
+{% block nav_actions %}
+    <a href="/projects/{{ project_name }}" class="btn">← 返回详情</a>
+{% endblock %}
+{% block content %}
+<div class="container wide">
+    <div class="breadcrumb">
+        <a href="/">项目列表</a>
+        <span class="sep">/</span>
+        <a href="/projects/{{ project_name }}">{{ project_name }}</a>
+        <span class="sep">/</span>
+        <span>{{ version }}</span>
+        <span class="sep">/</span>
+        <span>源码浏览</span>
+    </div>
+
+    <div class="card mb-12">
+        <div class="row between">
+            <div class="row">
+                <span class="badge badge-primary">{{ project_name }}</span>
+                <span class="badge badge-success">{{ version }}</span>
+                <span class="muted" id="file-info"></span>
+            </div>
+            <div class="row">
+                <input type="text" class="form-control" id="search-file" placeholder="过滤文件..." style="width: 220px;">
+            </div>
+        </div>
+    </div>
+
+    <div class="grid cols-2" style="grid-template-columns: 320px 1fr;">
+        <div class="file-tree" id="file-tree"></div>
+        <div class="code-viewer" id="code-viewer">
+            <div class="empty">
+                <div class="icon">📄</div>
+                <p>选择左侧文件查看内容</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const NAME = {{ project_name|tojson }};
+const VERSION = {{ version|tojson }};
+const treeEl = document.getElementById('file-tree');
+const viewerEl = document.getElementById('code-viewer');
+const fileInfoEl = document.getElementById('file-info');
+const searchEl = document.getElementById('search-file');
+let treeData = null;
+
+async function loadTree() {
+    try {
+        treeData = await API.get(`/api/projects/${encodeURIComponent(NAME)}/versions/${encodeURIComponent(VERSION)}/tree`);
+        renderTree();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function renderTree() {
+    const kw = searchEl.value.trim().toLowerCase();
+    treeEl.innerHTML = '';
+    const root = document.createElement('div');
+    root.className = 'file-tree-item';
+    root.innerHTML = `<span class="icon">📁</span><span>${escapeHtml(treeData.name || 'source')}</span>`;
+    root.style.fontWeight = '600';
+    treeEl.appendChild(root);
+    for (const child of (treeData.children || [])) {
+        const node = renderNode(child, kw);
+        if (node) treeEl.appendChild(node);
+    }
+}
+
+function renderNode(node, kw) {
+    if (kw && !node.is_dir) {
+        if (!node.name.toLowerCase().includes(kw) && !node.path.toLowerCase().includes(kw)) return null;
+    }
+    const item = document.createElement('div');
+    item.className = 'file-tree-item';
+    item.dataset.path = node.path;
+    if (node.is_dir) {
+        item.innerHTML = `<span class="icon">📁</span><span>${escapeHtml(node.name)}</span>`;
+        const childrenWrap = document.createElement('div');
+        childrenWrap.className = 'file-tree-children';
+        let hasChild = false;
+        for (const child of (node.children || [])) {
+            const c = renderNode(child, kw);
+            if (c) { childrenWrap.appendChild(c); hasChild = true; }
+        }
+        if (kw && !hasChild) return null;
+        item.onclick = () => {
+            const expanded = childrenWrap.style.display !== 'none';
+            childrenWrap.style.display = expanded ? 'none' : 'block';
+            item.querySelector('.icon').textContent = expanded ? '📁' : '📂';
+        };
+        const wrap = document.createElement('div');
+        wrap.appendChild(item);
+        wrap.appendChild(childrenWrap);
+        return wrap;
+    } else {
+        const ext = node.name.split('.').pop().toLowerCase();
+        const iconMap = { py: '🐍', js: '📜', ts: '📜', html: '🌐', css: '🎨', json: '🔧', md: '📝', txt: '📄' };
+        item.innerHTML = `<span class="icon">${iconMap[ext] || '📄'}</span><span>${escapeHtml(node.name)}</span>`;
+        item.onclick = () => loadFile(node.path, item);
+        return item;
+    }
+}
+
+async function loadFile(path, itemEl) {
+    treeEl.querySelectorAll('.file-tree-item.active').forEach(el => el.classList.remove('active'));
+    if (itemEl) itemEl.classList.add('active');
+    viewerEl.innerHTML = '<div class="muted">加载中...</div>';
+    try {
+        const data = await API.get(`/api/projects/${encodeURIComponent(NAME)}/versions/${encodeURIComponent(VERSION)}/file?path=${encodeURIComponent(path)}`);
+        fileInfoEl.textContent = `${path} (${formatSize(data.size)})`;
+        if (!data.is_text || data.content === null) {
+            viewerEl.innerHTML = '<div class="empty"><div class="icon">📦</div><p>二进制文件，无法预览</p></div>';
+            return;
+        }
+        const content = data.content || '';
+        const lines = content.split('\n');
+        const lineNumbers = lines.map((_, i) => i + 1).join('\n');
+        viewerEl.innerHTML = `
+            <div style="display: flex;">
+                <pre class="code-line-numbers">${escapeHtml(lineNumbers)}</pre>
+                <pre style="flex: 1;">${escapeHtml(content)}</pre>
+            </div>`;
+    } catch (e) {
+        viewerEl.innerHTML = `<div class="empty"><div class="icon">❌</div><p>${escapeHtml(e.message)}</p></div>`;
+    }
+}
+
+searchEl.oninput = () => renderTree();
+loadTree();
+</script>
+{% endblock %}

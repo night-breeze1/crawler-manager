@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ project_name }} - 思路流程{% endblock %}
+{% block nav_actions %}
+    <a href="/projects/{{ project_name }}" class="btn">← 返回详情</a>
+{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="breadcrumb">
+        <a href="/">项目列表</a>
+        <span class="sep">/</span>
+        <a href="/projects/{{ project_name }}">{{ project_name }}</a>
+        <span class="sep">/</span>
+        <span>思路流程</span>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">思路流程文档</div>
+            <div class="row">
+                <button class="btn btn-sm" id="btn-preview">预览</button>
+                <button class="btn btn-sm" id="btn-edit">编辑</button>
+                <button class="btn btn-sm btn-primary" id="btn-save">保存</button>
+            </div>
+        </div>
+        <p class="muted mb-12">记录该爬虫项目的核心思路、关键步骤与踩坑经验，便于后续版本迭代时参考。</p>
+        <textarea class="form-control" id="editor" style="min-height: 480px; font-family: 'JetBrains Mono', Consolas, monospace;"></textarea>
+        <div id="preview" class="code-viewer hidden" style="min-height: 480px;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const NAME = {{ project_name|tojson }};
+const editor = document.getElementById('editor');
+const preview = document.getElementById('preview');
+let original = '';
+
+async function load() {
+    try {
+        const data = await API.get('/api/projects/' + encodeURIComponent(NAME) + '/flow');
+        editor.value = data.content || '';
+        original = editor.value;
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+document.getElementById('btn-save').onclick = async () => {
+    try {
+        await API.putJson('/api/projects/' + encodeURIComponent(NAME) + '/flow', { content: editor.value });
+        original = editor.value;
+        toast('已保存');
+    } catch (e) { toast(e.message, 'error'); }
+};
+
+document.getElementById('btn-edit').onclick = () => {
+    editor.classList.remove('hidden');
+    preview.classList.add('hidden');
+};
+
+document.getElementById('btn-preview').onclick = () => {
+    editor.classList.add('hidden');
+    preview.classList.remove('hidden');
+    preview.innerHTML = '<pre>' + escapeHtml(editor.value) + '</pre>';
+};
+
+window.addEventListener('beforeunload', (e) => {
+    if (editor.value !== original) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+load();
+</script>
+{% endblock %}
