@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+{% block title %}{{ project_name }} - 项目详情{% endblock %}
+{% block nav_actions %}
+    <a href="/" class="btn">← 返回列表</a>
+{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="breadcrumb">
+        <a href="/">项目列表</a>
+        <span class="sep">/</span>
+        <span id="breadcrumb-name">{{ project_name }}</span>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title" id="p-name">{{ project_name }}</div>
+            <div class="row">
+                <button class="btn btn-sm" id="btn-edit">编辑</button>
+                <a class="btn btn-sm" id="btn-flow" href="/projects/{{ project_name }}/flow">思路流程</a>
+                <a class="btn btn-sm btn-primary" id="btn-add-version" href="/projects/{{ project_name }}/add-version">+ 新增版本</a>
+                <button class="btn btn-sm" id="btn-copy-version">复制为新版本</button>
+                <button class="btn btn-sm" id="btn-diff">版本对比</button>
+                <button class="btn btn-sm btn-danger" id="btn-delete">删除项目</button>
+            </div>
+        </div>
+        <div id="p-info"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">版本列表</div>
+            <span class="muted" id="current-version-tip"></span>
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>版本号</th>
+                    <th>说明</th>
+                    <th>文件数</th>
+                    <th>大小</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="versions-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-edit">
+    <div class="modal">
+        <div class="modal-title">编辑项目</div>
+        <form id="form-edit">
+            <div class="form-group">
+                <label>项目名称</label>
+                <input type="text" class="form-control" name="new_name">
+                <small class="muted">修改名称将同时改变项目目录名</small>
+            </div>
+            <div class="form-group">
+                <label>描述</label>
+                <textarea class="form-control" name="description"></textarea>
+            </div>
+            <div class="form-group">
+                <label>标签（逗号分隔）</label>
+                <input type="text" class="form-control" name="tags">
+            </div>
+            <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn" data-close>取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-ver-desc">
+    <div class="modal">
+        <div class="modal-title">编辑版本说明</div>
+        <form id="form-ver-desc">
+            <div class="form-group">
+                <label>版本号</label>
+                <input type="text" class="form-control" name="version" readonly>
+            </div>
+            <div class="form-group">
+                <label>说明</label>
+                <textarea class="form-control" name="description"></textarea>
+            </div>
+            <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn" data-close>取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-replace">
+    <div class="modal">
+        <div class="modal-title">替换版本源码</div>
+        <form id="form-replace">
+            <div class="form-group">
+                <label>版本号</label>
+                <input type="text" class="form-control" name="version" readonly>
+            </div>
+            <div class="form-group">
+                <label>新源码文件夹 *</label>
+                <input type="file" class="form-control" name="files" webkitdirectory multiple required>
+                <small class="muted">将完全替换该版本的源码</small>
+            </div>
+            <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn" data-close>取消</button>
+                <button type="submit" class="btn btn-primary">替换</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-copy">
+    <div class="modal">
+        <div class="modal-title">从已有版本复制创建新版本</div>
+        <form id="form-copy">
+            <div class="form-group">
+                <label>源版本</label>
+                <select class="form-control" name="src_version" id="copy-src"></select>
+            </div>
+            <div class="form-group">
+                <label>新版本号 *</label>
+                <input type="text" class="form-control" name="new_version" required placeholder="例如：v1.2.0">
+            </div>
+            <div class="form-group">
+                <label>版本说明</label>
+                <input type="text" class="form-control" name="description" placeholder="例如：基于 v1.1.0 适配新接口">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="set_as_current" checked> 设为当前版本
+                </label>
+            </div>
+            <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn" data-close>取消</button>
+                <button type="submit" class="btn btn-primary">创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-diff">
+    <div class="modal" style="max-width: 720px;">
+        <div class="modal-title">版本对比</div>
+        <div class="form-group">
+            <label>选择两个版本</label>
+            <div class="row" style="gap: 8px;">
+                <select class="form-control" id="diff-a"></select>
+                <span class="muted">vs</span>
+                <select class="form-control" id="diff-b"></select>
+                <button class="btn btn-primary btn-sm" id="btn-run-diff">对比</button>
+            </div>
+        </div>
+        <div id="diff-result" class="mt-12"></div>
+        <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button type="button" class="btn" data-close>关闭</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const NAME = {{ project_name|tojson }};
+let currentName = NAME;
+let current = null;
+
+const editModal = document.getElementById('modal-edit');
+const verDescModal = document.getElementById('modal-ver-desc');
+const replaceModal = document.getElementById('modal-replace');
+const copyModal = document.getElementById('modal-copy');
+const diffModal = document.getElementById('modal-diff');
+
+function apiUrl(path) {
+    return '/api/projects/' + encodeURIComponent(currentName) + path;
+}
+
+async function load() {
+    try {
+        current = await API.get('/api/projects/' + encodeURIComponent(currentName));
+        renderInfo();
+        renderVersions();
+    } catch (e) {
+        toast(e.message, 'error');
+        if (e.http === 404) setTimeout(() => location.href = '/', 1500);
+    }
+}
+
+function renderInfo() {
+    document.getElementById('p-name').textContent = current.name;
+    document.getElementById('breadcrumb-name').textContent = current.name;
+    document.getElementById('p-info').innerHTML = `
+        <p class="mb-12">${escapeHtml(current.description || '暂无描述')}</p>
+        <div class="mb-12">${renderTags(current.tags)}</div>
+        <div class="muted">
+            创建时间：${formatDate(current.created_at)} |
+            更新时间：${formatDate(current.updated_at)} |
+            总大小：${formatSize(current.total_size)}
+        </div>`;
+
+    document.getElementById('current-version-tip').textContent = '当前版本：' + (current.current_version || '-');
+}
+
+function renderVersions() {
+    const tbody = document.getElementById('versions-tbody');
+    if (!current.versions.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;padding:24px;">暂无版本</td></tr>';
+        return;
+    }
+    tbody.innerHTML = current.versions.map(v => {
+        const isCurrent = v.version === current.current_version;
+        return `
+        <tr>
+            <td>
+                ${escapeHtml(v.version)}
+                ${isCurrent ? '<span class="badge badge-success">当前</span>' : ''}
+            </td>
+            <td>${escapeHtml(v.description || '-')}</td>
+            <td>${v.file_count}</td>
+            <td>${formatSize(v.total_size)}</td>
+            <td>${formatDate(v.created_at)}</td>
+            <td>
+                <div class="row" style="gap: 4px; flex-wrap: wrap;">
+                    <a class="btn btn-sm" href="/projects/${encodeURIComponent(current.name)}/versions/${encodeURIComponent(v.version)}/browse">浏览</a>
+                    <button class="btn btn-sm" data-edit-desc="${escapeHtml(v.version)}">改说明</button>
+                    <button class="btn btn-sm" data-replace="${escapeHtml(v.version)}">替换源码</button>
+                    ${!isCurrent ? `<button class="btn btn-sm btn-primary" data-switch="${escapeHtml(v.version)}">切换</button>` : ''}
+                    ${current.versions.length > 1 ? `<button class="btn btn-sm btn-danger" data-del="${escapeHtml(v.version)}">删除</button>` : ''}
+                    <a class="btn btn-sm" href="/api/projects/${encodeURIComponent(current.name)}/versions/${encodeURIComponent(v.version)}/download">下载</a>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-switch]').forEach(btn => {
+        btn.onclick = async () => {
+            const ver = btn.dataset.switch;
+            if (!await confirmDialog(`确认切换到版本 ${ver}？`)) return;
+            try {
+                await API.post(apiUrl('/versions/' + encodeURIComponent(ver) + '/switch'));
+                toast('切换成功');
+                await load();
+            } catch (e) { toast(e.message, 'error'); }
+        };
+    });
+    tbody.querySelectorAll('[data-del]').forEach(btn => {
+        btn.onclick = async () => {
+            const ver = btn.dataset.del;
+            if (!await confirmDialog(`确认删除版本 ${ver}？该版本源码将被永久删除。`)) return;
+            try {
+                await API.del(apiUrl('/versions/' + encodeURIComponent(ver)));
+                toast('已删除');
+                await load();
+            } catch (e) { toast(e.message, 'error'); }
+        };
+    });
+    tbody.querySelectorAll('[data-edit-desc]').forEach(btn => {
+        btn.onclick = () => {
+            const ver = btn.dataset.editDesc;
+            const v = current.versions.find(x => x.version === ver);
+            const form = document.getElementById('form-ver-desc');
+            form.version.value = ver;
+            form.description.value = v.description || '';
+            verDescModal.classList.add('show');
+        };
+    });
+    tbody.querySelectorAll('[data-replace]').forEach(btn => {
+        btn.onclick = () => {
+            const ver = btn.dataset.replace;
+            const form = document.getElementById('form-replace');
+            form.version.value = ver;
+            form.reset();
+            form.version.value = ver;
+            replaceModal.classList.add('show');
+        };
+    });
+}
+
+function fillVersionSelect(selectEl, exclude) {
+    selectEl.innerHTML = current.versions.map(v =>
+        `<option value="${escapeHtml(v.version)}">${escapeHtml(v.version)}</option>`
+    ).join('');
+}
+
+document.getElementById('btn-edit').onclick = () => {
+    if (!current) { toast('数据加载中，请稍候再试', 'error'); return; }
+    const form = document.getElementById('form-edit');
+    form.new_name.value = current.name;
+    form.description.value = current.description || '';
+    form.tags.value = (current.tags || []).join(',');
+    editModal.classList.add('show');
+};
+editModal.querySelector('[data-close]').onclick = () => editModal.classList.remove('show');
+editModal.onclick = (e) => { if (e.target === editModal) editModal.classList.remove('show'); };
+
+document.getElementById('form-edit').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = {
+        new_name: fd.get('new_name'),
+        description: fd.get('description'),
+        tags: (fd.get('tags') || '').split(',').map(t => t.trim()).filter(Boolean)
+    };
+    try {
+        const updated = await API.putJson('/api/projects/' + encodeURIComponent(currentName), data);
+        toast('已保存');
+        editModal.classList.remove('show');
+        if (updated.name !== currentName) {
+            location.href = '/projects/' + encodeURIComponent(updated.name);
+            return;
+        }
+        await load();
+    } catch (err) { toast(err.message, 'error'); }
+};
+
+verDescModal.querySelector('[data-close]').onclick = () => verDescModal.classList.remove('show');
+verDescModal.onclick = (e) => { if (e.target === verDescModal) verDescModal.classList.remove('show'); };
+document.getElementById('form-ver-desc').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const ver = fd.get('version');
+    try {
+        await API.putJson(apiUrl('/versions/' + encodeURIComponent(ver)), { description: fd.get('description') });
+        toast('已保存');
+        verDescModal.classList.remove('show');
+        await load();
+    } catch (err) { toast(err.message, 'error'); }
+};
+
+replaceModal.querySelector('[data-close]').onclick = () => replaceModal.classList.remove('show');
+replaceModal.onclick = (e) => { if (e.target === replaceModal) replaceModal.classList.remove('show'); };
+document.getElementById('form-replace').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const ver = fd.get('version');
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = '替换中...';
+    try {
+        await API.post(apiUrl('/versions/' + encodeURIComponent(ver) + '/replace'), fd);
+        toast('源码已替换');
+        replaceModal.classList.remove('show');
+        await load();
+    } catch (err) { toast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = '替换'; }
+};
+
+document.getElementById('btn-copy-version').onclick = () => {
+    if (!current.versions.length) { toast('暂无版本可复制', 'error'); return; }
+    fillVersionSelect(document.getElementById('copy-src'));
+    const form = document.getElementById('form-copy');
+    form.new_version.value = '';
+    form.description.value = '';
+    form.set_as_current.checked = true;
+    copyModal.classList.add('show');
+};
+copyModal.querySelector('[data-close]').onclick = () => copyModal.classList.remove('show');
+copyModal.onclick = (e) => { if (e.target === copyModal) copyModal.classList.remove('show'); };
+document.getElementById('form-copy').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = {
+        src_version: fd.get('src_version'),
+        new_version: fd.get('new_version'),
+        description: fd.get('description') || '',
+        set_as_current: fd.get('set_as_current') === 'on'
+    };
+    try {
+        await API.postJson(apiUrl('/versions/copy'), data);
+        toast('复制成功');
+        copyModal.classList.remove('show');
+        await load();
+    } catch (err) { toast(err.message, 'error'); }
+};
+
+document.getElementById('btn-diff').onclick = () => {
+    if (current.versions.length < 2) { toast('至少需要 2 个版本才能对比', 'error'); return; }
+    const a = document.getElementById('diff-a');
+    const b = document.getElementById('diff-b');
+    fillVersionSelect(a);
+    fillVersionSelect(b);
+    if (current.versions.length >= 2) {
+        a.value = current.versions[0].version;
+        b.value = current.versions[current.versions.length - 1].version;
+    }
+    document.getElementById('diff-result').innerHTML = '';
+    diffModal.classList.add('show');
+};
+diffModal.querySelector('[data-close]').onclick = () => diffModal.classList.remove('show');
+diffModal.onclick = (e) => { if (e.target === diffModal) diffModal.classList.remove('show'); };
+
+document.getElementById('btn-run-diff').onclick = async () => {
+    const a = document.getElementById('diff-a').value;
+    const b = document.getElementById('diff-b').value;
+    if (!a || !b) { toast('请选择两个版本', 'error'); return; }
+    if (a === b) { toast('请选择不同的版本', 'error'); return; }
+    const resultEl = document.getElementById('diff-result');
+    resultEl.innerHTML = '<div class="muted">对比中...</div>';
+    try {
+        const r = await API.get(apiUrl('/versions/' + encodeURIComponent(a) + '/diff/' + encodeURIComponent(b)));
+        resultEl.innerHTML = `
+            <div class="card" style="background: var(--bg);">
+                <div class="row" style="gap: 16px; margin-bottom: 12px;">
+                    <span class="badge badge-primary">${escapeHtml(a)} → ${escapeHtml(b)}</span>
+                    <span class="badge badge-success">新增 ${r.summary.added_count}</span>
+                    <span class="badge badge-danger">删除 ${r.summary.removed_count}</span>
+                    <span class="badge badge-warning">修改 ${r.summary.modified_count}</span>
+                    <span class="muted">未变 ${r.unchanged_count}</span>
+                </div>
+                ${r.added.length ? `<div class="mb-12"><strong style="color: var(--success);">新增文件：</strong><pre style="margin-top:6px;">${escapeHtml(r.added.join('\n'))}</pre></div>` : ''}
+                ${r.removed.length ? `<div class="mb-12"><strong style="color: var(--danger);">删除文件：</strong><pre style="margin-top:6px;">${escapeHtml(r.removed.join('\n'))}</pre></div>` : ''}
+                ${r.modified.length ? `<div class="mb-12"><strong style="color: var(--warning);">修改文件：</strong><pre style="margin-top:6px;">${escapeHtml(r.modified.join('\n'))}</pre></div>` : ''}
+                ${!r.added.length && !r.removed.length && !r.modified.length ? '<div class="muted">两版本内容完全一致</div>' : ''}
+            </div>`;
+    } catch (err) {
+        resultEl.innerHTML = `<div class="muted" style="color: var(--danger);">${escapeHtml(err.message)}</div>`;
+    }
+};
+
+document.getElementById('btn-delete').onclick = async () => {
+    if (!await confirmDialog(`确认删除项目 ${currentName}？所有版本与源码将被永久删除。`)) return;
+    try {
+        await API.del('/api/projects/' + encodeURIComponent(currentName));
+        toast('已删除');
+        setTimeout(() => location.href = '/', 800);
+    } catch (e) { toast(e.message, 'error'); }
+};
+
+load();
+</script>
+{% endblock %}

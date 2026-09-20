@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ project_name }} - 新增版本{% endblock %}
+{% block nav_actions %}
+    <a href="/projects/{{ project_name }}" class="btn">← 返回详情</a>
+{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="breadcrumb">
+        <a href="/">项目列表</a>
+        <span class="sep">/</span>
+        <a href="/projects/{{ project_name }}">{{ project_name }}</a>
+        <span class="sep">/</span>
+        <span>新增版本</span>
+    </div>
+
+    <div class="card">
+        <div class="card-title mb-12">为项目 {{ project_name }} 添加新版本</div>
+        <p class="muted mb-24">上传新版本的整个项目文件夹。建议先查看"思路流程"页了解上一版思路。</p>
+        <form id="form-add-version">
+            <div class="form-group">
+                <label>版本号 *</label>
+                <input type="text" class="form-control" name="version" required placeholder="例如：v1.1.0">
+            </div>
+            <div class="form-group">
+                <label>版本说明</label>
+                <input type="text" class="form-control" name="description" placeholder="例如：适配新版风控接口">
+            </div>
+            <div class="form-group">
+                <label>项目文件夹 *</label>
+                <input type="file" class="form-control" name="files" webkitdirectory multiple required>
+                <small class="muted">选择该版本的整个爬虫项目文件夹</small>
+            </div>
+            <div class="row" style="gap: 8px; margin-top: 16px;">
+                <a href="/projects/{{ project_name }}" class="btn">取消</a>
+                <button type="submit" class="btn btn-primary">上传并创建版本</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const NAME = {{ project_name|tojson }};
+document.getElementById('form-add-version').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+    try {
+        await API.post('/api/projects/' + encodeURIComponent(NAME) + '/versions', fd);
+        toast('版本添加成功');
+        setTimeout(() => location.href = '/projects/' + encodeURIComponent(NAME), 800);
+    } catch (err) { toast(err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = '上传并创建版本'; }
+};
+</script>
+{% endblock %}

@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}爬虫项目管理工具 - 首页{% endblock %}
+{% block nav_actions %}
+    <button class="btn btn-primary" id="btn-add">+ 新增爬虫项目</button>
+{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="row between mb-24">
+        <h2>爬虫项目列表</h2>
+        <div class="row">
+            <input type="text" class="form-control" id="search" placeholder="搜索项目名/描述/标签..." style="width: 240px;">
+        </div>
+    </div>
+    <div id="project-list" class="grid cols-3"></div>
+    <div id="empty" class="empty hidden">
+        <div class="icon">📭</div>
+        <p>暂无爬虫项目，点击右上角"新增爬虫项目"添加</p>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-add">
+    <div class="modal">
+        <div class="modal-title">新增爬虫项目</div>
+        <form id="form-add">
+            <div class="form-group">
+                <label>项目名称 *</label>
+                <input type="text" class="form-control" name="name" required placeholder="例如：shumei">
+            </div>
+            <div class="form-group">
+                <label>描述</label>
+                <textarea class="form-control" name="description" placeholder="简要描述该爬虫的目标与场景"></textarea>
+            </div>
+            <div class="form-group">
+                <label>标签（逗号分隔）</label>
+                <input type="text" class="form-control" name="tags" placeholder="例如：反爬,数美,风控">
+            </div>
+            <div class="form-group">
+                <label>初始版本号</label>
+                <input type="text" class="form-control" name="initial_version" value="v1.0.0">
+            </div>
+            <div class="form-group">
+                <label>版本说明</label>
+                <input type="text" class="form-control" name="version_description" placeholder="例如：首版完成">
+            </div>
+            <div class="form-group">
+                <label>项目文件夹（可选，留空则仅创建空项目）</label>
+                <input type="file" class="form-control" name="files" webkitdirectory multiple>
+                <small class="muted">选择整个爬虫项目文件夹上传</small>
+            </div>
+            <div class="row" style="justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                <button type="button" class="btn" data-close>取消</button>
+                <button type="submit" class="btn btn-primary">创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const listEl = document.getElementById('project-list');
+const emptyEl = document.getElementById('empty');
+const searchEl = document.getElementById('search');
+const modal = document.getElementById('modal-add');
+let allProjects = [];
+
+async function loadProjects() {
+    try {
+        allProjects = await API.get('/api/projects');
+        render();
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function render() {
+    const kw = searchEl.value.trim().toLowerCase();
+    let projects = allProjects;
+    if (kw) {
+        projects = projects.filter(p =>
+            p.name.toLowerCase().includes(kw) ||
+            (p.description || '').toLowerCase().includes(kw) ||
+            (p.tags || []).some(t => t.toLowerCase().includes(kw))
+        );
+    }
+    if (!projects.length) {
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        emptyEl.querySelector('p').textContent = kw ? '没有匹配的项目' : '暂无爬虫项目，点击右上角"新增爬虫项目"添加';
+        return;
+    }
+    emptyEl.classList.add('hidden');
+    listEl.innerHTML = projects.map(p => `
+        <div class="card project-card" data-name="${escapeHtml(p.name)}">
+            <div class="name">${escapeHtml(p.name)}</div>
+            <div class="desc">${escapeHtml(p.description || '暂无描述')}</div>
+            <div class="mb-12">${renderTags(p.tags)}</div>
+            <div class="meta">
+                <span>📦 ${p.version_count} 版本</span>
+                <span>💾 ${formatSize(p.total_size)}</span>
+            </div>
+            <div class="meta mt-12">
+                <span>当前: ${escapeHtml(p.current_version || '-')}</span>
+                <span>更新: ${formatDate(p.updated_at)}</span>
+            </div>
+        </div>`).join('');
+    listEl.querySelectorAll('.project-card').forEach(el => {
+        el.onclick = () => location.href = '/projects/' + encodeURIComponent(el.dataset.name);
+    });
+}
+
+document.getElementById('btn-add').onclick = () => modal.classList.add('show');
+modal.querySelector('[data-close]').onclick = () => modal.classList.remove('show');
+modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('show'); };
+
+document.getElementById('form-add').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const submitBtn = e.target.querySelector('button[type=submit]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '创建中...';
+    try {
+        await API.post('/api/projects', fd);
+        toast('创建成功');
+        modal.classList.remove('show');
+        e.target.reset();
+        await loadProjects();
+    } catch (err) { toast(err.message, 'error'); }
+    finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '创建';
+    }
+};
+
+searchEl.oninput = render;
+loadProjects();
+</script>
+{% endblock %}
